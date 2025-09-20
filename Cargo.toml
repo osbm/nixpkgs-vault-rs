@@ -1,0 +1,12 @@
+[package]
+name = "nixpkgs-stats"
+version = "1.2.2"
+edition = "2021"
+authors = ["osbm <osbm@osbm.dev>"]
+description = "A simple Nixpkgs statistics generator"
+license = "MIT"
+repository = "https://github.com/osbm/nixpkgs-stats"
+documentation = "https://osbm.dev/nixpkgs-stats"
+keywords = ["nixpkgs", "statistics", "generator"]
+categories = ["development", "parsing"]
+exclude = ["docs/", "*.nix", ".github", ".envrc", "flake.lock"]
