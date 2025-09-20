@@ -31,18 +31,6 @@ $ nixpkgs-vault -t <git-tag> -o <output-directory>
 or
 
 ```
-$ nixpkgs-vault --branch <git-branch> -o <output-directory>
-```
-
-or
-
-```
-$ nixpkgs-vault -b <git-branch> -o <output-directory>
-```
-
-or
-
-```
 $ nixpkgs-vault
 ```
 defaults to the latest nixpkgs-unstable revision and outputs to ./nixpkgs-vault
