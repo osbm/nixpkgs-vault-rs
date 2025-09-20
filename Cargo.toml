@@ -10,3 +10,6 @@ documentation = "https://osbm.dev/nixpkgs-vault"
 keywords = ["nixpkgs", "statistics", "generator"]
 categories = ["development", "parsing"]
 exclude = ["docs/", "*.nix", ".github", ".envrc", "flake.lock"]
+
+[dependencies]
+clap = "4.5.48"
