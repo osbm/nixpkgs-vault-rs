@@ -13,3 +13,5 @@ exclude = ["docs/", "*.nix", ".github", ".envrc", "flake.lock"]
 
 [dependencies]
 clap = { version = "4.5.48", features = ["derive"] }
+colored = "2.1"
+indicatif = "0.17"
