@@ -15,3 +15,5 @@ exclude = ["docs/", "*.nix", ".github", ".envrc", "flake.lock"]
 clap = { version = "4.5.48", features = ["derive"] }
 colored = "2.1"
 indicatif = "0.17"
+serde = "1.0.226"
+serde_json = "1.0"
