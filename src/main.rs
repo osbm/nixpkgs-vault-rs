@@ -1,9 +1,11 @@
 use clap::Parser;
 use std::process::Command;
 use std::path::Path;
+use std::fs;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde_json::Value;
+use chrono::Utc;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -142,6 +144,11 @@ fn main() {
         };
 
         get_package_info(name, &nixpkgs_path, &mut package_info);
+
+        if let Err(e) = save_package_note(&package_info, &args.outdir) {
+            eprintln!("{} {}", "❌ Failed to save note for package:".red().bold(), name.red());
+            eprintln!("{} {}", "❌ Error:".red().bold(), format!("{}", e).red());
+        }
 
         pb.inc(1);
     }
@@ -311,3 +318,142 @@ fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut P
     }
 }
 
+fn save_package_note(package_info: &PackageInfo, outdir: &str) -> Result<(), std::io::Error> {
+    // Extract the derivation name from the full path
+    // /nix/store/abc123-package-name-1.0.drv -> abc123-package-name-1.0.drv
+    let drv_filename = package_info.drv_path
+        .strip_prefix("/nix/store/")
+        .unwrap_or(&package_info.drv_path)
+        .strip_suffix(".drv")
+        .unwrap_or(&package_info.drv_path);
+
+    // Create packages directory
+    let packages_dir = format!("{}/packages", outdir);
+    fs::create_dir_all(&packages_dir)?;
+
+    // Create the markdown file path
+    let note_path = format!("{}/{}.md", packages_dir, drv_filename);
+
+    // Generate the Obsidian note content
+    let note_content = generate_package_note_template(package_info);
+
+    // Write the file
+    fs::write(&note_path, note_content)?;
+
+    Ok(())
+}
+
+fn generate_package_note_template(package_info: &PackageInfo) -> String {
+    let mut content = String::new();
+
+    // Title and metadata
+    content.push_str(&format!("# {}\n\n", package_info.name));
+
+    // Tags
+    content.push_str("#nixpkgs #package");
+    if package_info.broken {
+        content.push_str(" #broken");
+    }
+    if !package_info.available {
+        content.push_str(" #unavailable");
+    }
+    content.push_str("\n\n");
+
+    // Basic information
+    content.push_str("## 📋 Package Information\n\n");
+    content.push_str(&format!("- **Name**: `{}`\n", package_info.name));
+
+    if !package_info.version.is_empty() {
+        content.push_str(&format!("- **Version**: `{}`\n", package_info.version));
+    }
+
+    content.push_str(&format!("- **Available**: {}\n",
+        if package_info.available { "✅ Yes" } else { "❌ No" }));
+    content.push_str(&format!("- **Broken**: {}\n",
+        if package_info.broken { "⚠️ Yes" } else { "✅ No" }));
+
+    if let Some(ref description) = package_info.description {
+        content.push_str(&format!("- **Description**: {}\n", description));
+    }
+
+    if let Some(ref homepage) = package_info.homepage {
+        content.push_str(&format!("- **Homepage**: [{}]({})\n", homepage, homepage));
+    }
+
+    if !package_info.license_short_name.is_empty() {
+        content.push_str(&format!("- **License**: `{}`\n", package_info.license_short_name));
+    }
+
+    // Platforms
+    if !package_info.platforms.is_empty() {
+        content.push_str(&format!("- **Platforms**: {}\n",
+            package_info.platforms.iter()
+                .map(|p| format!("`{}`", p))
+                .collect::<Vec<_>>()
+                .join(", ")));
+    }
+
+    content.push('\n');
+
+    // Long description
+    if let Some(ref long_desc) = package_info.long_description {
+        content.push_str("## 📝 Description\n\n");
+        content.push_str(long_desc);
+        content.push_str("\n\n");
+    }
+
+    // Maintainers
+    if !package_info.maintainers.is_empty() {
+        content.push_str("## 👥 Maintainers\n\n");
+        for maintainer in &package_info.maintainers {
+            content.push_str(&format!("- {}\n", maintainer));
+        }
+        content.push('\n');
+    }
+
+    // Derivation information
+    content.push_str("## 🔧 Build Information\n\n");
+    content.push_str(&format!("- **Derivation Path**: `{}`\n", package_info.drv_path));
+
+    if !package_info.outputs.is_empty() {
+        content.push_str(&format!("- **Outputs**: {}\n",
+            package_info.outputs.iter()
+                .map(|o| format!("`{}`", o))
+                .collect::<Vec<_>>()
+                .join(", ")));
+    }
+
+    content.push('\n');
+
+    // Dependencies (with links to other notes)
+    if !package_info.dependencies.is_empty() {
+        content.push_str("## 🔗 Dependencies\n\n");
+        for dep in &package_info.dependencies {
+            let dep_name = dep
+                .strip_prefix("/nix/store/")
+                .unwrap_or(dep)
+                .strip_suffix(".drv")
+                .unwrap_or(dep);
+
+            // Create Obsidian link to dependency note
+            content.push_str(&format!("- [[{}]]\n", dep_name));
+        }
+        content.push('\n');
+    }
+
+    // Input sources
+    if !package_info.input_srcs.is_empty() {
+        content.push_str("## 📁 Input Sources\n\n");
+        for src in &package_info.input_srcs {
+            content.push_str(&format!("- `{}`\n", src));
+        }
+        content.push('\n');
+    }
+
+    // Footer with generation timestamp
+    content.push_str("---\n");
+    content.push_str(&format!("*Generated on {}*\n",
+        Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+
+    content
+}
