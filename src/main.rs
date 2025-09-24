@@ -6,6 +6,8 @@ use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde_json::Value;
 use chrono::Utc;
+use rayon::prelude::*;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -22,6 +24,9 @@ struct Args {
     #[arg(short, long, default_value = "https://github.com/NixOS/nixpkgs.git")]
     git_url: String,
 
+    /// Number of parallel threads (0 = auto-detect)
+    #[arg(short = 'j', long, default_value = "0")]
+    threads: usize,
 }
 
 struct PackageInfo {
@@ -45,6 +50,20 @@ struct PackageInfo {
 
 fn main() {
     let args = Args::parse();
+
+    // Configure rayon thread pool
+    let num_threads = if args.threads == 0 {
+        num_cpus::get()
+    } else {
+        args.threads
+    };
+
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()
+        .unwrap();
+
+    println!("{} {}", "🚀 Using threads:".cyan().bold(), num_threads.to_string().bright_white());
 
     // check if the output directory exists, if not create it
     // if it exists ask the user if they want to overwrite it
@@ -105,9 +124,11 @@ fn main() {
 
     println!("{} {}", "📊 Total packages found:".cyan().bold(), packages.len().to_string().bright_white());
 
-    // Example: Print first 5 package names with progress bar
+    // Process packages in parallel
     println!("{}", "📦 Processing packages:".cyan().bold());
     let sample_count = packages.len();
+
+    // Create progress tracking
     let pb = ProgressBar::new(sample_count as u64);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -116,13 +137,14 @@ fn main() {
             .progress_chars("#>-")
     );
 
-    for (i, (name, info)) in packages.iter().enumerate() {
-        if i >= sample_count {
-            break;
-        }
-        pb.set_message(format!("Processing {}", name));
+    let processed_count = AtomicUsize::new(0);
+    let error_count = AtomicUsize::new(0);
+
+    // Convert to Vec and process packages concurrently
+    let packages_vec: Vec<_> = packages.iter().collect();
+    packages_vec.par_iter().for_each(|(name, info)| {
         let mut package_info = PackageInfo {
-            name: name.clone(),
+            name: (*name).clone(),
             version: info["version"].as_str().unwrap_or("unknown").to_string(),
             available: info["meta"]["available"].as_bool().unwrap_or(false) == false,
             broken: info["meta"]["broken"].as_bool().unwrap_or(false),
@@ -148,11 +170,21 @@ fn main() {
         if let Err(e) = save_package_note(&package_info, &args.outdir) {
             eprintln!("{} {}", "❌ Failed to save note for package:".red().bold(), name.red());
             eprintln!("{} {}", "❌ Error:".red().bold(), format!("{}", e).red());
+            error_count.fetch_add(1, Ordering::Relaxed);
         }
 
-        pb.inc(1);
-    }
-    pb.finish_with_message("Sample packages loaded!");
+        let current = processed_count.fetch_add(1, Ordering::Relaxed) + 1;
+        pb.set_position(current as u64);
+        if current % 10 == 0 || current < 100 {  // Update message less frequently for performance
+            pb.set_message(format!("Processing {} ({} errors)", name, error_count.load(Ordering::Relaxed)));
+        }
+    });
+
+    pb.finish_with_message(format!(
+        "All packages processed! {} total, {} errors",
+        sample_count,
+        error_count.load(Ordering::Relaxed)
+    ));
     println!();
 
     println!("{}", "🎉 Done!".green().to_string());
@@ -255,9 +287,9 @@ fn generate_packages_json(nixpkgs_path: &str, outdir: &str) {
 
 
 fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut PackageInfo) {
-    // nix derivation show nixpkgs#package_name
+    // Use a more optimized command with reduced output and better error handling
     let command = format!(
-        "nix derivation show {}#{}",
+        "timeout 30s nix derivation show {}#{} 2>/dev/null || echo '{{}}'",
         nixpkgs_path, package_name
     );
 
@@ -268,20 +300,23 @@ fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut P
 
     let output = match output {
         Ok(output) => output,
-        Err(e) => {
-            eprintln!("{} {}", "❌ Failed to run command:".red().bold(), command.red());
-            eprintln!("{} {}", "❌ Error:".red().bold(), format!("Failed to run command: {}", e).red());
+        Err(_) => {
+            // Silent failure - package might not exist or have issues
             return;
         }
     };
 
     if !output.status.success() {
-        eprintln!("{} {}", "❌ Command failed:".red().bold(), command.red());
-        eprintln!("{} {}", "❌ Error:".red().bold(), format!("Command failed: {}", String::from_utf8_lossy(&output.stderr)).red());
+        // Silent failure for broken or unavailable packages
         return;
     }
 
     let derivation_json = String::from_utf8_lossy(&output.stdout);
+
+    // Skip empty or malformed JSON
+    if derivation_json.trim().is_empty() || derivation_json.trim() == "{}" {
+        return;
+    }
 
     // Parse the JSON output
     if let Ok(parsed_json) = serde_json::from_str::<serde_json::Value>(&derivation_json) {
@@ -316,6 +351,7 @@ fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut P
     } else {
         eprintln!("{} Failed to parse derivation JSON for package: {}", "❌".red().bold(), package_name);
     }
+    // Silent failure for JSON parsing errors - many packages might not be buildable
 }
 
 fn save_package_note(package_info: &PackageInfo, outdir: &str) -> Result<(), std::io::Error> {

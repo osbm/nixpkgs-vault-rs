@@ -18,3 +18,5 @@ indicatif = "0.17"
 serde = "1.0.226"
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
+rayon = "1.10"
+num_cpus = "1.16"
