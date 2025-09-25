@@ -165,12 +165,16 @@ fn main() {
             dependencies: Vec::new(),
         };
 
-        get_package_info(name, &nixpkgs_path, &mut package_info);
-
-        if let Err(e) = save_package_note(&package_info, &args.outdir) {
-            eprintln!("{} {}", "❌ Failed to save note for package:".red().bold(), name.red());
-            eprintln!("{} {}", "❌ Error:".red().bold(), format!("{}", e).red());
+        let evaluation_success = get_package_info(name, &nixpkgs_path, &mut package_info);
+        
+        if !evaluation_success {
+            eprintln!("❌ {}", name.red());
             error_count.fetch_add(1, Ordering::Relaxed);
+        } else {
+            if let Err(e) = save_package_note(&package_info, &args.outdir) {
+                eprintln!("💾 {} (save failed: {})", name.yellow(), e.to_string().bright_black());
+                error_count.fetch_add(1, Ordering::Relaxed);
+            }
         }
 
         let current = processed_count.fetch_add(1, Ordering::Relaxed) + 1;
@@ -286,7 +290,7 @@ fn generate_packages_json(nixpkgs_path: &str, outdir: &str) {
 }
 
 
-fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut PackageInfo) {
+fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut PackageInfo) -> bool {
     // Use a more optimized command with reduced output and better error handling
     let command = format!(
         "timeout 30s nix derivation show {}#{} 2>/dev/null || echo '{{}}'",
@@ -301,24 +305,22 @@ fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut P
     let output = match output {
         Ok(output) => output,
         Err(_) => {
-            // Silent failure - package might not exist or have issues
-            return;
+            // Command execution failed
+            return false;
         }
     };
 
     if !output.status.success() {
-        // Silent failure for broken or unavailable packages
-        return;
+        // Command failed - likely package doesn't exist or has evaluation issues
+        return false;
     }
 
     let derivation_json = String::from_utf8_lossy(&output.stdout);
-
+    
     // Skip empty or malformed JSON
     if derivation_json.trim().is_empty() || derivation_json.trim() == "{}" {
-        return;
-    }
-
-    // Parse the JSON output
+        return false;
+    }    // Parse the JSON output
     if let Ok(parsed_json) = serde_json::from_str::<serde_json::Value>(&derivation_json) {
         // The output is an object where keys are drv paths
         if let Some(derivation_obj) = parsed_json.as_object() {
@@ -346,12 +348,12 @@ fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut P
 
                 // Dependencies are essentially the inputDrvs (store paths of dependencies)
                 package_info.dependencies = package_info.input_drvs.clone();
+                return true;
             }
         }
-    } else {
-        eprintln!("{} Failed to parse derivation JSON for package: {}", "❌".red().bold(), package_name);
     }
-    // Silent failure for JSON parsing errors - many packages might not be buildable
+    // JSON parsing failed or no derivation found
+    false
 }
 
 fn save_package_note(package_info: &PackageInfo, outdir: &str) -> Result<(), std::io::Error> {
