@@ -27,6 +27,10 @@ struct Args {
     /// Number of parallel threads (0 = auto-detect)
     #[arg(short = 'j', long, default_value = "0")]
     threads: usize,
+
+    /// Limit number of packages to process (0 = no limit)
+    #[arg(short, long, default_value = "10")]
+    limit: usize,
 }
 
 struct PackageInfo {
@@ -126,7 +130,17 @@ fn main() {
 
     // Process packages in parallel
     println!("{}", "📦 Processing packages:".cyan().bold());
-    let sample_count = packages.len();
+    
+    // Convert to Vec and apply limit if specified
+    let mut packages_vec: Vec<_> = packages.iter().collect();
+    
+    // Apply limit if specified
+    if args.limit > 0 {
+        packages_vec.truncate(args.limit);
+        println!("{} {}", "🔢 Limited to packages:".yellow().bold(), args.limit.to_string().bright_white());
+    }
+    
+    let sample_count = packages_vec.len();
 
     // Create progress tracking
     let pb = ProgressBar::new(sample_count as u64);
@@ -140,8 +154,6 @@ fn main() {
     let processed_count = AtomicUsize::new(0);
     let error_count = AtomicUsize::new(0);
 
-    // Convert to Vec and process packages concurrently
-    let packages_vec: Vec<_> = packages.iter().collect();
     packages_vec.par_iter().for_each(|(name, info)| {
         let mut package_info = PackageInfo {
             name: (*name).clone(),
