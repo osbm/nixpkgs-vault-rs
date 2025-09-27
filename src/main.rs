@@ -409,7 +409,7 @@ fn generate_package_note_template(package_info: &PackageInfo) -> String {
     content.push_str("aliases:\n");
     content.push_str(&format!("  - {}\n", package_info.name));
     content.push_str("tags:\n");
-    
+
     // Add conditional tags
     if package_info.broken {
         content.push_str("  - broken\n");
@@ -418,17 +418,17 @@ fn generate_package_note_template(package_info: &PackageInfo) -> String {
         content.push_str("  - not-available\n");
     }
     content.push_str(&format!("  - license/{}\n", package_info.license_short_name));
-    
+
     // Add maintainer tags
     for maintainer in &package_info.maintainers {
         content.push_str(&format!("  - maintainers/{}\n", maintainer));
     }
-    
+
     // Add output tags
     for output in &package_info.outputs {
         content.push_str(&format!("  - outputs/{}\n", output));
     }
-    
+
     content.push_str("---\n\n");
 
     // Title
@@ -493,17 +493,17 @@ fn generate_package_note_template(package_info: &PackageInfo) -> String {
     // Build Information section
     content.push_str("## 🔧 Build Information\n\n");
     content.push_str(&format!("- **Derivation Path**: `{}`\n", package_info.drv_path));
-    
+
     if let Some(ref position) = package_info.position {
         content.push_str(&format!("- **Source Position**: `{}`\n", position));
     }
-    
+
     if !package_info.outputs.is_empty() {
         content.push_str("- **Outputs**:\n");
         for output in &package_info.outputs {
             // Extract the output path from derivation info if available
-            content.push_str(&format!("  - `{}`:  `/nix/store/{}`\n", 
-                output, 
+            content.push_str(&format!("  - `{}`:  `/nix/store/{}`\n",
+                output,
                 package_info.drv_path
                     .strip_prefix("/nix/store/")
                     .unwrap_or(&package_info.drv_path)
