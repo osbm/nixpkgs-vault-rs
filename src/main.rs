@@ -8,6 +8,11 @@ use serde_json::Value;
 use chrono::Utc;
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use rust_embed::RustEmbed;
+
+#[derive(RustEmbed)]
+#[folder = "template/"]
+struct TemplateAssets;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -87,6 +92,10 @@ fn main() {
         println!("{} {}", "✅ Created output directory:".green().bold(), args.outdir.bright_white());
     }
 
+    // Copy template files to output directory
+    if let Err(e) = copy_template_files(&args.outdir) {
+        eprintln!("{} {}", "⚠️  Failed to copy template files:".yellow().bold(), e.to_string().red());
+    }
 
     println!(
         "{} {}",
@@ -397,6 +406,39 @@ fn save_package_note(package_info: &PackageInfo, outdir: &str) -> Result<(), std
 
     // Write the file
     fs::write(&note_path, note_content)?;
+
+    Ok(())
+}
+
+fn copy_template_files(outdir: &str) -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", "📁 Copying template files...".cyan().bold());
+
+    let mut files_copied = 0;
+
+    for file_path in TemplateAssets::iter() {
+        let file_data = TemplateAssets::get(&file_path).unwrap();
+        let content = file_data.data.as_ref();
+
+        // Create the full output path
+        let output_path = format!("{}/{}", outdir, file_path);
+
+        // Create parent directories if they don't exist
+        if let Some(parent) = Path::new(&output_path).parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        // Write the file
+        fs::write(&output_path, content)?;
+        files_copied += 1;
+
+        println!("{} {}", "  ✅".green(), file_path.bright_white());
+    }
+
+    if files_copied > 0 {
+        println!("{} {} {}", "✅ Copied".green().bold(), files_copied.to_string().bright_white(), "template files".green().bold());
+    } else {
+        println!("{}", "ℹ️  No template files found to copy".yellow());
+    }
 
     Ok(())
 }
