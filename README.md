@@ -1,40 +1,107 @@
-# nixpkgs-vault
+# 🗄️ nixpkgs-vault
 
-I want to generate an obsidian vault from a nixpkgs git revision.
+> A comprehensive Nixpkgs package explorer and documentation generator
 
-It will have all the packages as notes, and the dependencies between them as links. Each note will contain the package's metadata, such as its name, version, and description. Additionally, I want to include some statistics about the nixpkgs repository, such as the number of packages, the number of maintainers, and the number of packages per maintainer.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=flat&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Nix](https://img.shields.io/badge/NIX-5277C3.svg?style=flat&logo=NixOS&logoColor=white)](https://nixos.org/)
 
-# expected cli usage
+nixpkgs-vault is a high-performance Rust tool that generates comprehensive documentation and analysis for Nixpkgs packages. It creates an Obsidian-ready knowledge vault with detailed package information, dependencies, and metadata.
 
-```
-$ nixpkgs-vault --revision <git-revision> --output <output-directory>
-```
 
-or
+## 🚀 Quick Start
 
-```
-$ nixpkgs-vault -r <git-revision> -o <output-directory>
-```
+### Installation
 
-or
+#### Using Nix (Recommended)
 
-```
-$ nixpkgs-vault --tag <git-tag> -o <output-directory>
-```
+```bash
+# Run directly with nix
+nix run github:osbm/nixpkgs-vault
 
-or
-
-```
-$ nixpkgs-vault -t <git-tag> -o <output-directory>
+# Or install to your profile
+nix profile install github:osbm/nixpkgs-vault
 ```
 
-or
+#### From Source
+
+```bash
+git clone https://github.com/osbm/nixpkgs-vault.git
+cd nixpkgs-vault
+cargo build --release
+./target/release/nixpkgs-vault --help
+```
+
+### Basic Usage
+
+```bash
+# Generate vault for nixos-unstable (default)
+nixpkgs-vault
+
+# Use specific revision
+nixpkgs-vault --revision nixos-23.11
+
+# Custom output directory
+nixpkgs-vault --outdir my-nixpkgs-vault
+
+# Limit processing for testing
+nixpkgs-vault --limit 100
+
+# Use more threads for faster processing
+nixpkgs-vault --threads 16
+```
+
+## 📋 Command Line Options
 
 ```
-$ nixpkgs-vault
+Usage: nixpkgs-vault [OPTIONS]
+
+Options:
+  -o, --outdir <OUTDIR>      Output directory [default: nixpkgs-vault]
+  -r, --revision <REVISION>  Nixpkgs git revision [default: nixos-unstable]
+  -g, --git-url <GIT_URL>    Nixpkgs git url [default: https://github.com/NixOS/nixpkgs.git]
+  -j, --threads <THREADS>    Number of parallel threads (0 = auto-detect) [default: 0]
+  -l, --limit <LIMIT>        Limit number of packages to process (0 = no limit) [default: 0]
+  -h, --help                 Print help
+  -V, --version              Print version
 ```
-defaults to the latest nixpkgs-unstable revision and outputs to ./nixpkgs-vault
 
+## 📁 Output Structure
 
-# Problem number 1: get the nixpkgs
+```
+nixpkgs-vault/
+├── README.md                    # Project overview (from template)
+├── packages.json                # Raw package metadata
+├── packages/                    # Individual package documentation
+│   ├── abc123-firefox-118.0.md
+│   ├── def456-python3-3.11.md
+│   └── ...
+└── .obsidian/                   # Obsidian configuration (from template)
+    ├── app.json
+    ├── workspace.json
+    └── ...
+```
 
+## 📝 Package Documentation Format
+
+Each package gets a detailed markdown file with:
+
+- **📋 Package Information**: Name, version, availability, license
+- **📝 Description**: Long and short descriptions
+- **👥 Maintainers**: GitHub usernames with automatic linking
+- **🔧 Build Information**: Derivation paths, outputs, source positions
+- **🔗 Dependencies**: Cross-linked dependencies as Obsidian links
+- **📁 Input Sources**: Source file paths
+- **🏷️ Tags**: Automatic tagging for licenses, maintainers, outputs
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [NixOS](https://nixos.org/) community for the amazing package manager
+- [Obsidian](https://obsidian.md/) for the knowledge management inspiration
+- Rust community for the excellent ecosystem
+
+*Built with ❤️ using Rust and Nix*
