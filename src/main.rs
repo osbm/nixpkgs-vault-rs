@@ -254,19 +254,26 @@ fn main() {
         let evaluation_success = get_package_info(name, &nixpkgs_path, &mut package_info);
 
         if !evaluation_success {
-            eprintln!("❌ {}", name.red());
+            pb.println(format!("❌ {}", name.red()));
             error_count.fetch_add(1, Ordering::Relaxed);
-        } else {
-            if let Err(e) = save_package_note(&package_info, &args.outdir) {
-                eprintln!("💾 {} (save failed: {})", name.yellow(), e.to_string().bright_black());
-                error_count.fetch_add(1, Ordering::Relaxed);
-            }
+        } else if let Err(e) = save_package_note(&package_info, &args.outdir) {
+            pb.println(format!(
+                "💾 {} (save failed: {})",
+                name.yellow(),
+                e.to_string().bright_black()
+            ));
+            error_count.fetch_add(1, Ordering::Relaxed);
         }
 
         let current = processed_count.fetch_add(1, Ordering::Relaxed) + 1;
         pb.set_position(current as u64);
-        if current % 10 == 0 || current < 100 {  // Update message less frequently for performance
-            pb.set_message(format!("Processing {} ({} errors)", name, error_count.load(Ordering::Relaxed)));
+        if current % 10 == 0 || current < 100 {
+            // Update message less frequently for performance
+            pb.set_message(format!(
+                "Processing {} ({} errors)",
+                name,
+                error_count.load(Ordering::Relaxed)
+            ));
         }
     });
 
