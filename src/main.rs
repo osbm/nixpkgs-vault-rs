@@ -2,6 +2,7 @@ use clap::Parser;
 use std::process::Command;
 use std::path::Path;
 use std::fs;
+use std::io::Write;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde_json::Value;
@@ -79,7 +80,8 @@ fn main() {
     // if it exists ask the user if they want to overwrite it
     if Path::new(&args.outdir).exists() {
         println!("{} {}", "⚠️  Output directory already exists:".yellow().bold(), args.outdir.bright_white());
-        println!("{} {}", "⚠️  Do you want to continue? (y/n): ".yellow().bold(), "");
+        print!("{}", "⚠️  Do you want to continue? (y/n): ".yellow().bold());
+        std::io::stdout().flush().unwrap(); // Ensure the prompt is displayed immediately
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
 
