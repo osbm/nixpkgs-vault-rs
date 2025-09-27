@@ -29,7 +29,7 @@ struct Args {
     threads: usize,
 
     /// Limit number of packages to process (0 = no limit)
-    #[arg(short, long, default_value = "10")]
+    #[arg(short, long, default_value = "0")]
     limit: usize,
 }
 
@@ -130,16 +130,16 @@ fn main() {
 
     // Process packages in parallel
     println!("{}", "📦 Processing packages:".cyan().bold());
-    
+
     // Convert to Vec and apply limit if specified
     let mut packages_vec: Vec<_> = packages.iter().collect();
-    
+
     // Apply limit if specified
     if args.limit > 0 {
         packages_vec.truncate(args.limit);
         println!("{} {}", "🔢 Limited to packages:".yellow().bold(), args.limit.to_string().bright_white());
     }
-    
+
     let sample_count = packages_vec.len();
 
     // Create progress tracking
@@ -178,7 +178,7 @@ fn main() {
         };
 
         let evaluation_success = get_package_info(name, &nixpkgs_path, &mut package_info);
-        
+
         if !evaluation_success {
             eprintln!("❌ {}", name.red());
             error_count.fetch_add(1, Ordering::Relaxed);
@@ -328,7 +328,7 @@ fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut P
     }
 
     let derivation_json = String::from_utf8_lossy(&output.stdout);
-    
+
     // Skip empty or malformed JSON
     if derivation_json.trim().is_empty() || derivation_json.trim() == "{}" {
         return false;
