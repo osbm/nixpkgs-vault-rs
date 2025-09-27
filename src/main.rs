@@ -416,7 +416,7 @@ fn get_package_info(
 ) -> bool {
     // Use a more optimized command with reduced output and better error handling
     let command = format!(
-        "timeout 30s nix derivation show {}#{} 2>/dev/null || echo '{{}}'",
+        "timeout 30s env NIXPKGS_ALLOW_UNFREE=1 NIXPKGS_ALLOW_INSECURE=1 NIXPKGS_ALLOW_BROKEN=1 NIXPKGS_ALLOW_UNSUPPORTED_SYSTEM=1 nix derivation show --impure {}#{} 2>/dev/null || echo '{{}}'",
         nixpkgs_path, package_name
     );
 
