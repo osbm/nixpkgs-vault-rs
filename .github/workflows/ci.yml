@@ -20,4 +20,4 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Run the package
-        run: nix run .
+        run: nix run . -- -l 100
