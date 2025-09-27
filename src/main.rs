@@ -43,6 +43,7 @@ struct PackageInfo {
     license_short_name: String,
     long_description: Option<String>,
     maintainers: Vec<String>,
+    position: Option<String>, // nix source position
     drv_path: String, // comes from evaluation
     outputs: Vec<String>, // comes from drv file
     input_srcs: Vec<String>, // comes from drv file
@@ -165,8 +166,15 @@ fn main() {
             license_short_name: info["license"]["shortName"].as_str().unwrap_or("unknown").to_string(),
             long_description: info["meta"]["longDescription"].as_str().map(|s| s.to_string()),
             maintainers: info["meta"]["maintainers"].as_array().map_or(Vec::new(), |arr| {
-                arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+                arr.iter().filter_map(|v| {
+                    if let Some(obj) = v.as_object() {
+                        obj.get("github").and_then(|g| g.as_str()).map(|s| s.to_string())
+                    } else {
+                        None
+                    }
+                }).collect()
             }),
+            position: info["meta"]["position"].as_str().map(|s| s.to_string()),
             drv_path: String::new(),
             outputs: Vec::new(),
             input_srcs: Vec::new(),
@@ -396,20 +404,48 @@ fn save_package_note(package_info: &PackageInfo, outdir: &str) -> Result<(), std
 fn generate_package_note_template(package_info: &PackageInfo) -> String {
     let mut content = String::new();
 
-    // Title and metadata
-    content.push_str(&format!("# {}\n\n", package_info.name));
-
-    // Tags
-    content.push_str("#nixpkgs #package");
+    // Front matter with aliases and tags
+    content.push_str("---\n");
+    content.push_str("aliases:\n");
+    content.push_str(&format!("  - {}\n", package_info.name));
+    content.push_str("tags:\n");
+    
+    // Add conditional tags
     if package_info.broken {
-        content.push_str(" #broken");
+        content.push_str("  - broken\n");
     }
     if !package_info.available {
-        content.push_str(" #unavailable");
+        content.push_str("  - not-available\n");
     }
-    content.push_str("\n\n");
+    content.push_str(&format!("  - license/{}\n", package_info.license_short_name));
+    
+    // Add maintainer tags
+    for maintainer in &package_info.maintainers {
+        content.push_str(&format!("  - maintainers/{}\n", maintainer));
+    }
+    
+    // Add output tags
+    for output in &package_info.outputs {
+        content.push_str(&format!("  - outputs/{}\n", output));
+    }
+    
+    content.push_str("---\n\n");
 
-    // Basic information
+    // Title
+    content.push_str(&format!("# {}\n\n", package_info.name));
+
+    // Description section (if available)
+    if let Some(ref long_desc) = package_info.long_description {
+        content.push_str("## 📝 Description\n\n");
+        content.push_str(long_desc);
+        content.push_str("\n\n");
+    } else if let Some(ref description) = package_info.description {
+        content.push_str("## 📝 Description\n\n");
+        content.push_str(description);
+        content.push_str("\n\n");
+    }
+
+    // Package Information section
     content.push_str("## 📋 Package Information\n\n");
     content.push_str(&format!("- **Name**: `{}`\n", package_info.name));
 
@@ -443,34 +479,38 @@ fn generate_package_note_template(package_info: &PackageInfo) -> String {
                 .join(", ")));
     }
 
-    content.push('\n');
-
-    // Long description
-    if let Some(ref long_desc) = package_info.long_description {
-        content.push_str("## 📝 Description\n\n");
-        content.push_str(long_desc);
-        content.push_str("\n\n");
-    }
-
-    // Maintainers
+    // Maintainers section
     if !package_info.maintainers.is_empty() {
         content.push_str("## 👥 Maintainers\n\n");
         for maintainer in &package_info.maintainers {
-            content.push_str(&format!("- {}\n", maintainer));
+            content.push_str(&format!("- @{}\n", maintainer));
         }
-        content.push('\n');
+        content.push_str("\n");
     }
 
-    // Derivation information
+    content.push_str("\n");
+
+    // Build Information section
     content.push_str("## 🔧 Build Information\n\n");
     content.push_str(&format!("- **Derivation Path**: `{}`\n", package_info.drv_path));
-
+    
+    if let Some(ref position) = package_info.position {
+        content.push_str(&format!("- **Source Position**: `{}`\n", position));
+    }
+    
     if !package_info.outputs.is_empty() {
-        content.push_str(&format!("- **Outputs**: {}\n",
-            package_info.outputs.iter()
-                .map(|o| format!("`{}`", o))
-                .collect::<Vec<_>>()
-                .join(", ")));
+        content.push_str("- **Outputs**:\n");
+        for output in &package_info.outputs {
+            // Extract the output path from derivation info if available
+            content.push_str(&format!("  - `{}`:  `/nix/store/{}`\n", 
+                output, 
+                package_info.drv_path
+                    .strip_prefix("/nix/store/")
+                    .unwrap_or(&package_info.drv_path)
+                    .strip_suffix(".drv")
+                    .unwrap_or(&package_info.drv_path)
+            ));
+        }
     }
 
     content.push('\n');
