@@ -1,15 +1,15 @@
+use chrono::Utc;
 use clap::Parser;
-use std::process::Command;
-use std::path::Path;
-use std::fs;
-use std::io::Write;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
-use serde_json::Value;
-use chrono::Utc;
 use rayon::prelude::*;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use rust_embed::RustEmbed;
+use serde_json::Value;
+use std::fs;
+use std::io::Write;
+use std::path::Path;
+use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(RustEmbed)]
 #[folder = "template/"]
@@ -50,14 +50,13 @@ struct PackageInfo {
     long_description: Option<String>,
     maintainers: Vec<String>,
     position: Option<String>, // nix source position
-    drv_path: String, // comes from evaluation
-    outputs: Vec<String>, // comes from drv file
-    input_srcs: Vec<String>, // comes from drv file
-    input_drvs: Vec<String>, // comes from drv file
+    drv_path: String,         // comes from evaluation
+    outputs: Vec<String>,     // comes from drv file
+    input_srcs: Vec<String>,  // comes from drv file
+    input_drvs: Vec<String>,  // comes from drv file
     platforms: Vec<String>,
     dependencies: Vec<String>, // List of dependencies' store paths, comes from the drv file
 }
-
 
 fn main() {
     let args = Args::parse();
@@ -74,29 +73,45 @@ fn main() {
         .build_global()
         .unwrap();
 
-    println!("{} {}", "🚀 Using threads:".cyan().bold(), num_threads.to_string().bright_white());
+    println!(
+        "{} {}",
+        "🚀 Using threads:".cyan().bold(),
+        num_threads.to_string().bright_white()
+    );
 
     // check if the output directory exists, if not create it
     // if it exists ask the user if they want to overwrite it
     if Path::new(&args.outdir).exists() {
-        println!("{} {}", "⚠️  Output directory already exists:".yellow().bold(), args.outdir.bright_white());
+        println!(
+            "{} {}",
+            "⚠️  Output directory already exists:".yellow().bold(),
+            args.outdir.bright_white()
+        );
         print!("{}", "⚠️  Do you want to continue? (y/n): ".yellow().bold());
         std::io::stdout().flush().unwrap(); // Ensure the prompt is displayed immediately
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
 
         if input.trim().to_lowercase() != "y" {
-            println!("{}", "❌ Aborting.".red().to_string());
+            println!("{}", "❌ Aborting.".red());
             std::process::exit(1);
         }
     } else {
         std::fs::create_dir_all(&args.outdir).unwrap();
-        println!("{} {}", "✅ Created output directory:".green().bold(), args.outdir.bright_white());
+        println!(
+            "{} {}",
+            "✅ Created output directory:".green().bold(),
+            args.outdir.bright_white()
+        );
     }
 
     // Copy template files to output directory
     if let Err(e) = copy_template_files(&args.outdir) {
-        eprintln!("{} {}", "⚠️  Failed to copy template files:".yellow().bold(), e.to_string().red());
+        eprintln!(
+            "{} {}",
+            "⚠️  Failed to copy template files:".yellow().bold(),
+            e.to_string().red()
+        );
     }
 
     println!(
@@ -106,31 +121,48 @@ fn main() {
             "{}/tree/{}",
             args.git_url.trim_end_matches(".git"),
             args.revision
-        ).blue().underline()
+        )
+        .blue()
+        .underline()
     );
 
     let nixpkgs_path = fetch_nixpkgs_with_nix(&args.git_url, &args.revision);
 
-    println!("{} {}", "✅ Nixpkgs fetched to:".green().bold(), nixpkgs_path.bright_white());
+    println!(
+        "{} {}",
+        "✅ Nixpkgs fetched to:".green().bold(),
+        nixpkgs_path.bright_white()
+    );
 
     if !analyze_nixpkgs(&nixpkgs_path) {
-        eprintln!("{} {}", "❌ Invalid nixpkgs repository:".red().bold(), nixpkgs_path.bright_white());
+        eprintln!(
+            "{} {}",
+            "❌ Invalid nixpkgs repository:".red().bold(),
+            nixpkgs_path.bright_white()
+        );
         std::process::exit(1);
     }
 
     let packages_json_path = format!("{}/packages.json", args.outdir);
     if Path::new(&packages_json_path).exists() {
-        println!("{} {}", "⚠️  packages.json already exists in:".yellow().bold(), packages_json_path.bright_white());
-        println!("{} {}", "⚠️  Skipping computation.".yellow().bold(), "");
+        println!(
+            "{} {}",
+            "⚠️  packages.json already exists in:".yellow().bold(),
+            packages_json_path.bright_white()
+        );
+        println!("{}", "⚠️  Skipping computation.".yellow().bold());
     } else {
         // create outdir if not exists
         std::fs::create_dir_all(&args.outdir).unwrap();
         generate_packages_json(&nixpkgs_path, &args.outdir);
     }
 
-
     // print loading packages.json
-    println!("{} {}", "📥 Loading packages.json to memory:".cyan().bold(), packages_json_path.bright_white());
+    println!(
+        "{} {}",
+        "📥 Loading packages.json to memory:".cyan().bold(),
+        packages_json_path.bright_white()
+    );
     // read packages.json
     let package_json_data = std::fs::read_to_string(&packages_json_path).unwrap();
 
@@ -138,7 +170,11 @@ fn main() {
     let parsed_json: Value = serde_json::from_str(&package_json_data).unwrap();
     let packages = parsed_json["packages"].as_object().unwrap();
 
-    println!("{} {}", "📊 Total packages found:".cyan().bold(), packages.len().to_string().bright_white());
+    println!(
+        "{} {}",
+        "📊 Total packages found:".cyan().bold(),
+        packages.len().to_string().bright_white()
+    );
 
     // Process packages in parallel
     println!("{}", "📦 Processing packages:".cyan().bold());
@@ -149,7 +185,11 @@ fn main() {
     // Apply limit if specified
     if args.limit > 0 {
         packages_vec.truncate(args.limit);
-        println!("{} {}", "🔢 Limited to packages:".yellow().bold(), args.limit.to_string().bright_white());
+        println!(
+            "{} {}",
+            "🔢 Limited to packages:".yellow().bold(),
+            args.limit.to_string().bright_white()
+        );
     }
 
     let sample_count = packages_vec.len();
@@ -160,7 +200,7 @@ fn main() {
         ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
             .unwrap()
-            .progress_chars("#>-")
+            .progress_chars("#>-"),
     );
 
     let processed_count = AtomicUsize::new(0);
@@ -170,29 +210,44 @@ fn main() {
         let mut package_info = PackageInfo {
             name: (*name).clone(),
             version: info["version"].as_str().unwrap_or("unknown").to_string(),
-            available: info["meta"]["available"].as_bool().unwrap_or(false) == false,
+            available: info["meta"]["available"].as_bool().unwrap_or(false),
             broken: info["meta"]["broken"].as_bool().unwrap_or(false),
             description: info["meta"]["description"].as_str().map(|s| s.to_string()),
             homepage: info["meta"]["homepage"].as_str().map(|s| s.to_string()),
-            license_short_name: info["license"]["shortName"].as_str().unwrap_or("unknown").to_string(),
-            long_description: info["meta"]["longDescription"].as_str().map(|s| s.to_string()),
-            maintainers: info["meta"]["maintainers"].as_array().map_or(Vec::new(), |arr| {
-                arr.iter().filter_map(|v| {
-                    if let Some(obj) = v.as_object() {
-                        obj.get("github").and_then(|g| g.as_str()).map(|s| s.to_string())
-                    } else {
-                        None
-                    }
-                }).collect()
-            }),
+            license_short_name: info["license"]["shortName"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_string(),
+            long_description: info["meta"]["longDescription"]
+                .as_str()
+                .map(|s| s.to_string()),
+            maintainers: info["meta"]["maintainers"]
+                .as_array()
+                .map_or(Vec::new(), |arr| {
+                    arr.iter()
+                        .filter_map(|v| {
+                            if let Some(obj) = v.as_object() {
+                                obj.get("github")
+                                    .and_then(|g| g.as_str())
+                                    .map(|s| s.to_string())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                }),
             position: info["meta"]["position"].as_str().map(|s| s.to_string()),
             drv_path: String::new(),
             outputs: Vec::new(),
             input_srcs: Vec::new(),
             input_drvs: Vec::new(),
-            platforms: info["meta"]["platforms"].as_array().map_or(Vec::new(), |arr| {
-                arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
-            }),
+            platforms: info["meta"]["platforms"]
+                .as_array()
+                .map_or(Vec::new(), |arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                }),
             dependencies: Vec::new(),
         };
 
@@ -222,9 +277,8 @@ fn main() {
     ));
     println!();
 
-    println!("{}", "🎉 Done!".green().to_string());
+    println!("{}", "🎉 Done!".green());
 }
-
 
 fn fetch_nixpkgs_with_nix(git_url: &str, revision: &str) -> String {
     let nix_expr = format!(
@@ -238,35 +292,47 @@ fn fetch_nixpkgs_with_nix(git_url: &str, revision: &str) -> String {
         ProgressStyle::default_spinner()
             .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
             .template("{spinner:.cyan} {msg}")
-            .unwrap()
+            .unwrap(),
     );
     spinner.set_message("Fetching nixpkgs repository...");
     spinner.enable_steady_tick(std::time::Duration::from_millis(100));
 
     let output = Command::new("nix-instantiate")
-        .args(&["--eval", "--json", "--expr", &nix_expr])
+        .args(["--eval", "--json", "--expr", &nix_expr])
         .output()
         .unwrap_or_else(|e| {
             spinner.finish_and_clear();
-            eprintln!("{}", "❌ Failed to run nix-instantiate".red().to_string());
-            eprintln!("{} {}", "❌ Error:".red().bold(), format!("Failed to run nix-instantiate: {}", e).red());
+            eprintln!("{}", "❌ Failed to run nix-instantiate".red());
+            eprintln!(
+                "{} {}",
+                "❌ Error:".red().bold(),
+                format!("Failed to run nix-instantiate: {}", e).red()
+            );
             std::process::exit(1);
         });
 
     if !output.status.success() {
         spinner.finish_and_clear();
-        eprintln!("{}", "❌ nix-instantiate command failed".red().to_string());
-        eprintln!("{} {}", "❌ Error:".red().bold(), format!("nix-instantiate failed: {}", String::from_utf8_lossy(&output.stderr)).red());
+        eprintln!("{}", "❌ nix-instantiate command failed".red());
+        eprintln!(
+            "{} {}",
+            "❌ Error:".red().bold(),
+            format!(
+                "nix-instantiate failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+            .red()
+        );
         std::process::exit(1);
     }
 
     spinner.finish_and_clear();
-    println!("{}", "✅ Repository fetched successfully!".green().to_string());
+    println!("{}", "✅ Repository fetched successfully!".green());
 
     let path = String::from_utf8_lossy(&output.stdout)
-    .trim()
-    .trim_matches('"')
-    .to_string();
+        .trim()
+        .trim_matches('"')
+        .to_string();
 
     path
 }
@@ -293,7 +359,7 @@ fn generate_packages_json(nixpkgs_path: &str, outdir: &str) {
         ProgressStyle::default_spinner()
             .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
             .template("{spinner:.cyan} {msg}")
-            .unwrap()
+            .unwrap(),
     );
     spinner.set_message("Computing packages.json...");
     spinner.enable_steady_tick(std::time::Duration::from_millis(100));
@@ -304,34 +370,50 @@ fn generate_packages_json(nixpkgs_path: &str, outdir: &str) {
         .output()
         .unwrap_or_else(|e| {
             spinner.finish_and_clear();
-            eprintln!("{} {}", "❌ Failed to run command:".red().bold(), command.red());
-            eprintln!("{} {}", "❌ Error:".red().bold(), format!("Failed to run command: {}", e).red());
+            eprintln!(
+                "{} {}",
+                "❌ Failed to run command:".red().bold(),
+                command.red()
+            );
+            eprintln!(
+                "{} {}",
+                "❌ Error:".red().bold(),
+                format!("Failed to run command: {}", e).red()
+            );
             std::process::exit(1);
         });
 
     if !output.status.success() {
         spinner.finish_and_clear();
         eprintln!("{} {}", "❌ Command failed:".red().bold(), command.red());
-        eprintln!("{} {}", "❌ Error:".red().bold(), format!("Command failed: {}", String::from_utf8_lossy(&output.stderr)).red());
+        eprintln!(
+            "{} {}",
+            "❌ Error:".red().bold(),
+            format!(
+                "Command failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+            .red()
+        );
         std::process::exit(1);
     }
 
     spinner.finish_and_clear();
-    println!("{}", "✅ packages.json computed successfully!".green().to_string());
+    println!("{}", "✅ packages.json computed successfully!".green());
 }
 
-
-fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut PackageInfo) -> bool {
+fn get_package_info(
+    package_name: &str,
+    nixpkgs_path: &str,
+    package_info: &mut PackageInfo,
+) -> bool {
     // Use a more optimized command with reduced output and better error handling
     let command = format!(
         "timeout 30s nix derivation show {}#{} 2>/dev/null || echo '{{}}'",
         nixpkgs_path, package_name
     );
 
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg(&command)
-        .output();
+    let output = Command::new("sh").arg("-c").arg(&command).output();
 
     let output = match output {
         Ok(output) => output,
@@ -351,7 +433,7 @@ fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut P
     // Skip empty or malformed JSON
     if derivation_json.trim().is_empty() || derivation_json.trim() == "{}" {
         return false;
-    }    // Parse the JSON output
+    } // Parse the JSON output
     if let Ok(parsed_json) = serde_json::from_str::<serde_json::Value>(&derivation_json) {
         // The output is an object where keys are drv paths
         if let Some(derivation_obj) = parsed_json.as_object() {
@@ -362,17 +444,18 @@ fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut P
 
                 // Extract outputs
                 if let Some(outputs) = drv_data.get("outputs").and_then(|o| o.as_object()) {
-                    package_info.outputs = outputs.keys().map(|k| k.clone()).collect();
+                    package_info.outputs = outputs.keys().cloned().collect();
                 }
 
                 // Extract inputDrvs
                 if let Some(input_drvs) = drv_data.get("inputDrvs").and_then(|i| i.as_object()) {
-                    package_info.input_drvs = input_drvs.keys().map(|k| k.clone()).collect();
+                    package_info.input_drvs = input_drvs.keys().cloned().collect();
                 }
 
                 // Extract inputSrcs
                 if let Some(input_srcs) = drv_data.get("inputSrcs").and_then(|i| i.as_array()) {
-                    package_info.input_srcs = input_srcs.iter()
+                    package_info.input_srcs = input_srcs
+                        .iter()
                         .filter_map(|s| s.as_str().map(|s| s.to_string()))
                         .collect();
                 }
@@ -390,7 +473,8 @@ fn get_package_info(package_name: &str, nixpkgs_path: &str, package_info: &mut P
 fn save_package_note(package_info: &PackageInfo, outdir: &str) -> Result<(), std::io::Error> {
     // Extract the derivation name from the full path
     // /nix/store/abc123-package-name-1.0.drv -> abc123-package-name-1.0.drv
-    let drv_filename = package_info.drv_path
+    let drv_filename = package_info
+        .drv_path
         .strip_prefix("/nix/store/")
         .unwrap_or(&package_info.drv_path)
         .strip_suffix(".drv")
@@ -437,7 +521,12 @@ fn copy_template_files(outdir: &str) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if files_copied > 0 {
-        println!("{} {} {}", "✅ Copied".green().bold(), files_copied.to_string().bright_white(), "template files".green().bold());
+        println!(
+            "{} {} {}",
+            "✅ Copied".green().bold(),
+            files_copied.to_string().bright_white(),
+            "template files".green().bold()
+        );
     } else {
         println!("{}", "ℹ️  No template files found to copy".yellow());
     }
@@ -461,7 +550,10 @@ fn generate_package_note_template(package_info: &PackageInfo) -> String {
     if !package_info.available {
         content.push_str("  - not-available\n");
     }
-    content.push_str(&format!("  - license/{}\n", package_info.license_short_name));
+    content.push_str(&format!(
+        "  - license/{}\n",
+        package_info.license_short_name
+    ));
 
     // Add maintainer tags
     for maintainer in &package_info.maintainers {
@@ -497,10 +589,22 @@ fn generate_package_note_template(package_info: &PackageInfo) -> String {
         content.push_str(&format!("- **Version**: `{}`\n", package_info.version));
     }
 
-    content.push_str(&format!("- **Available**: {}\n",
-        if package_info.available { "✅ Yes" } else { "❌ No" }));
-    content.push_str(&format!("- **Broken**: {}\n",
-        if package_info.broken { "⚠️ Yes" } else { "✅ No" }));
+    content.push_str(&format!(
+        "- **Available**: {}\n",
+        if package_info.available {
+            "✅ Yes"
+        } else {
+            "❌ No"
+        }
+    ));
+    content.push_str(&format!(
+        "- **Broken**: {}\n",
+        if package_info.broken {
+            "⚠️ Yes"
+        } else {
+            "✅ No"
+        }
+    ));
 
     if let Some(ref description) = package_info.description {
         content.push_str(&format!("- **Description**: {}\n", description));
@@ -511,16 +615,23 @@ fn generate_package_note_template(package_info: &PackageInfo) -> String {
     }
 
     if !package_info.license_short_name.is_empty() {
-        content.push_str(&format!("- **License**: `{}`\n", package_info.license_short_name));
+        content.push_str(&format!(
+            "- **License**: `{}`\n",
+            package_info.license_short_name
+        ));
     }
 
     // Platforms
     if !package_info.platforms.is_empty() {
-        content.push_str(&format!("- **Platforms**: {}\n",
-            package_info.platforms.iter()
+        content.push_str(&format!(
+            "- **Platforms**: {}\n",
+            package_info
+                .platforms
+                .iter()
                 .map(|p| format!("`{}`", p))
                 .collect::<Vec<_>>()
-                .join(", ")));
+                .join(", ")
+        ));
     }
 
     // Maintainers section
@@ -529,14 +640,17 @@ fn generate_package_note_template(package_info: &PackageInfo) -> String {
         for maintainer in &package_info.maintainers {
             content.push_str(&format!("- @{}\n", maintainer));
         }
-        content.push_str("\n");
+        content.push('\n');
     }
 
-    content.push_str("\n");
+    content.push('\n');
 
     // Build Information section
     content.push_str("## 🔧 Build Information\n\n");
-    content.push_str(&format!("- **Derivation Path**: `{}`\n", package_info.drv_path));
+    content.push_str(&format!(
+        "- **Derivation Path**: `{}`\n",
+        package_info.drv_path
+    ));
 
     if let Some(ref position) = package_info.position {
         content.push_str(&format!("- **Source Position**: `{}`\n", position));
@@ -546,9 +660,11 @@ fn generate_package_note_template(package_info: &PackageInfo) -> String {
         content.push_str("- **Outputs**:\n");
         for output in &package_info.outputs {
             // Extract the output path from derivation info if available
-            content.push_str(&format!("  - `{}`:  `/nix/store/{}`\n",
+            content.push_str(&format!(
+                "  - `{}`:  `/nix/store/{}`\n",
                 output,
-                package_info.drv_path
+                package_info
+                    .drv_path
                     .strip_prefix("/nix/store/")
                     .unwrap_or(&package_info.drv_path)
                     .strip_suffix(".drv")
@@ -586,8 +702,10 @@ fn generate_package_note_template(package_info: &PackageInfo) -> String {
 
     // Footer with generation timestamp
     content.push_str("---\n");
-    content.push_str(&format!("*Generated on {}*\n",
-        Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+    content.push_str(&format!(
+        "*Generated on {}*\n",
+        Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+    ));
 
     content
 }
